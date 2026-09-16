@@ -1,0 +1,5 @@
+mysql-connector-python
+nicegui
+plotly
+python-dotenv
+pytest

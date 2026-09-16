@@ -1,0 +1,27 @@
+Act as an expert Full-Stack Python Developer and Data Analyst. 
+I am building an "Automated Resource Allocation & Load Balancing System" for scheduling security shifts. The goal is to automate the weekly guard roster while strictly enforcing rest periods and balancing the workload fairly among personnel.
+
+Here is the tech stack we will use:
+1. Database: MySQL (optionally hosted on Cloud)
+2. Backend/Logic: Python
+3. Frontend/UI: your opinion (streamlit is an option)
+
+Here is the Database Schema concept (3 Tables):
+1. 'Personnel': ID, Full Name, Role (e.g., Fighter, Commander), Status (Available, Sick, etc.), Total_Hours_Done.
+2. 'Positions': Position Name, Required Role.
+3. 'Shifts_Roster': Shift ID, Date, Start Time, End Time, Position Name, Assigned_Person_ID (Starts as NULL).
+
+Here are the Core Business Rules (Hard Constraints):
+1. Full Coverage: Every shift in the 'Shifts_Roster' must be filled.
+2. Mandatory Rest: A person must have a minimum of 8 hours of rest between the end of their last shift and the start of their next shift.
+3. Load Balancing: When selecting between available personnel who meet the rest criteria, the system must prioritize the person with the lowest 'Total_Hours_Done'.
+
+The final Streamlit UI should have:
+- A button to "Generate Schedule" which triggers the Python logic to update the MySQL database.
+- A clean table displaying the final generated roster.
+- A visual dashboard (e.g., bar charts) showing the distribution of shift hours to prove fair load balancing.
+
+Our workflow rule: We will build this step-by-step. DO NOT write the entire application at once. 
+For your first response, please only do the following:
+1. Confirm you understand the project scope, constraints, and tech stack.
+2. Provide the exact MySQL `CREATE TABLE` queries for the 3 tables based on my concept above, so I can review and set up the database first.
