@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import mysql.connector
-from config import DB_CONFIG
+from config import DB_CONFIG, DB_NAME
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("init_db")
@@ -102,6 +102,27 @@ DEFAULT_ROLES = [
 ]
 
 
+def ensure_database():
+    """
+    Creates the target database if it doesn't exist yet (e.g. a fresh TiDB
+    Cloud Serverless cluster only ships a default 'test' database).
+    Connects without selecting a database, since selecting a missing one
+    would fail the connection itself.
+    """
+    cfg = {k: v for k, v in DB_CONFIG.items() if k != "database"}
+    conn = mysql.connector.connect(**cfg)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}` "
+            "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+        )
+        cursor.close()
+        logger.info("Database '%s' checked/created successfully.", DB_NAME)
+    finally:
+        conn.close()
+
+
 def ensure_schema(conn=None):
     """
     Verifies that all required tables exist. If missing, creates them.
@@ -109,6 +130,7 @@ def ensure_schema(conn=None):
     """
     should_close = False
     if conn is None:
+        ensure_database()
         conn = mysql.connector.connect(**DB_CONFIG)
         should_close = True
 

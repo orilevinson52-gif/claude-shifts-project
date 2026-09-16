@@ -34,7 +34,13 @@ DB_CONFIG = {
     "user": os.getenv("DB_USER", url_config.get("user", "root")),
     "password": os.getenv("DB_PASSWORD", url_config.get("password", "")),
     "database": os.getenv("DB_NAME", url_config.get("database", "shift_scheduler")),
+    # Force the pure-Python implementation: the compiled C extension fails to
+    # load auth plugins (e.g. "Authentication plugin 'mysql_native_password'
+    # cannot be loaded") on some platforms, including Windows.
+    "use_pure": True,
 }
+
+DB_NAME = DB_CONFIG["database"]
 
 # 2. SSL handling for cloud MySQL providers (Render, TiDB Cloud, Aiven, AWS RDS)
 ssl_ca = os.getenv("DB_SSL_CA")
