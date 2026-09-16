@@ -52,15 +52,18 @@ def build():
     raw_rows_by_name = {}
 
     def refresh():
-        conn = get_connection()
         try:
-            rows = get_all_roles(conn)
-        finally:
-            conn.close()
-        raw_rows_by_name.clear()
-        raw_rows_by_name.update({r["Role_Name"]: r for r in rows})
-        table.rows = format_rows(rows)
-        table.update()
+            conn = get_connection()
+            try:
+                rows = get_all_roles(conn)
+            finally:
+                conn.close()
+            raw_rows_by_name.clear()
+            raw_rows_by_name.update({r["Role_Name"]: r for r in rows})
+            table.rows = format_rows(rows)
+            table.update()
+        except Exception as e:
+            ui.notify(f"שגיאת תקשורת עם מסד הנתונים: {e}", color="negative")
 
     def open_form(row=None):
         is_edit = row is not None

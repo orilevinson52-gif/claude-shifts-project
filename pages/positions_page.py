@@ -41,13 +41,16 @@ def build():
     table.add_slot("body-cell-Required_Role", ROLE_SLOT)
 
     def refresh():
-        conn = get_connection()
         try:
-            rows = get_all_positions(conn)
-        finally:
-            conn.close()
-        table.rows = rows
-        table.update()
+            conn = get_connection()
+            try:
+                rows = get_all_positions(conn)
+            finally:
+                conn.close()
+            table.rows = rows
+            table.update()
+        except Exception as e:
+            ui.notify(f"שגיאת תקשורת עם מסד הנתונים: {e}", color="negative")
 
     def open_form(row=None):
         is_edit = row is not None

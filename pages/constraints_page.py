@@ -74,13 +74,16 @@ def build():
     table.add_slot("body-cell-End_Date", MONO_SLOT)
 
     def refresh():
-        conn = get_connection()
         try:
-            rows = get_all_unavailability(conn)
-        finally:
-            conn.close()
-        table.rows = format_rows(rows)
-        table.update()
+            conn = get_connection()
+            try:
+                rows = get_all_unavailability(conn)
+            finally:
+                conn.close()
+            table.rows = format_rows(rows)
+            table.update()
+        except Exception as e:
+            ui.notify(f"שגיאת תקשורת עם מסד הנתונים: {e}", color="negative")
 
     def open_form():
         conn = get_connection()

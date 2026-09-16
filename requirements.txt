@@ -1,5 +1,7 @@
 mysql-connector-python
 nicegui
 plotly
+numpy
+pandas
 python-dotenv
 pytest

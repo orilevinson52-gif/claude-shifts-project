@@ -76,12 +76,17 @@ def build():
     chart_container = ui.column().classes("w-full")
 
     def refresh():
-        conn = get_connection()
         try:
-            roster_rows = get_full_roster(conn)
-            hours_rows = get_hours_summary(conn)
-        finally:
-            conn.close()
+            conn = get_connection()
+            try:
+                roster_rows = get_full_roster(conn)
+                hours_rows = get_hours_summary(conn)
+            finally:
+                conn.close()
+        except Exception as e:
+            ui.notify(f"שגיאת תקשורת עם מסד הנתונים: {e}", color="negative")
+            roster_rows = []
+            hours_rows = []
 
         roster_container.clear()
         tables = build_tables_by_position(roster_rows)

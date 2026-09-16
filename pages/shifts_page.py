@@ -242,13 +242,16 @@ def build():
     table.add_slot("body-cell-End_Time", MONO_SLOT)
 
     def refresh():
-        conn = get_connection()
         try:
-            rows = get_all_shifts(conn)
-        finally:
-            conn.close()
-        table.rows = format_rows(rows)
-        table.update()
+            conn = get_connection()
+            try:
+                rows = get_all_shifts(conn)
+            finally:
+                conn.close()
+            table.rows = format_rows(rows)
+            table.update()
+        except Exception as e:
+            ui.notify(f"שגיאת תקשורת עם מסד הנתונים: {e}", color="negative")
 
     def open_form(row=None):
         is_edit = row is not None
