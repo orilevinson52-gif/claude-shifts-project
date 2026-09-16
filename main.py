@@ -1,5 +1,6 @@
 from nicegui import ui
 
+from config import APP_PORT
 from pages import (
     constraints_page,
     personnel_page,
@@ -125,4 +126,4 @@ def index():
 
 
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(title="שיבוץ משמרות אבטחה", port=8080, reload=False)
+    ui.run(title="שיבוץ משמרות אבטחה", host="0.0.0.0", port=APP_PORT, reload=False)
