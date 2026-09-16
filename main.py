@@ -1,6 +1,6 @@
-from nicegui import ui
+from nicegui import app, ui
 
-from config import APP_PORT
+from config import APP_PORT, AUTO_INIT_DB, SEED_INITIAL_DATA
 from pages import (
     constraints_page,
     personnel_page,
@@ -9,6 +9,7 @@ from pages import (
     schedule_page,
     shifts_page,
 )
+from scripts.init_db import ensure_schema, seed_sample_data
 
 ui.add_head_html(
     """
@@ -125,5 +126,28 @@ def index():
             schedule_page.build()
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.on_startup
+def on_startup():
+    if AUTO_INIT_DB:
+        try:
+            ensure_schema()
+            if SEED_INITIAL_DATA:
+                seed_sample_data()
+        except Exception as exc:
+            print(f"[WARN] Startup database verification: {exc}")
+
+
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(title="שיבוץ משמרות אבטחה", host="0.0.0.0", port=APP_PORT, reload=False)
+    ui.run(
+        title="שיבוץ משמרות אבטחה",
+        host="0.0.0.0",
+        port=APP_PORT,
+        reload=False,
+        show=False,
+        forwarded_allow_ips="*",
+    )
