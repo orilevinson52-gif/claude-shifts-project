@@ -101,7 +101,7 @@ def index():
         warning="oklch(0.64 0.17 55)",
         info="oklch(0.48 0.11 195)",
     )
-    ui.label("מערכת שיבוץ משמרות אבטחה").classes("rc-title text-2xl q-mb-md")
+    ui.label("מערכת שיבוץ משמרות").classes("rc-title text-2xl q-mb-md")
 
     with ui.tabs().classes("w-full") as tabs:
         personnel_tab = ui.tab("אנשי צוות")
@@ -144,7 +144,7 @@ def on_startup():
 
 if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
-        title="שיבוץ משמרות אבטחה",
+        title="שיבוץ משמרות",
         host="0.0.0.0",
         port=APP_PORT,
         reload=False,
