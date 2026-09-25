@@ -31,6 +31,55 @@ def get_user_by_username(conn, username):
     return row
 
 
+def get_user_by_id(conn, user_id):
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT ID, Username FROM Users WHERE ID = %s", (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row
+
+
+# --- Admin ---
+
+def get_all_users_with_stats(conn):
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT u.ID, u.Username, u.Created_At,
+               (SELECT COUNT(*) FROM Personnel p WHERE p.User_ID = u.ID) AS Personnel_Count,
+               (SELECT COUNT(*) FROM Positions po WHERE po.User_ID = u.ID) AS Positions_Count,
+               (SELECT COUNT(*) FROM Shifts_Roster s WHERE s.User_ID = u.ID) AS Shifts_Count
+        FROM Users u
+        ORDER BY u.Created_At
+        """
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    return rows
+
+
+def set_user_password(conn, user_id, password_hash):
+    cursor = conn.cursor()
+    cursor.execute("UPDATE Users SET Password_Hash = %s WHERE ID = %s", (password_hash, user_id))
+    conn.commit()
+    cursor.close()
+
+
+def delete_user_and_data(conn, user_id):
+    # Children first: the foreign keys don't cascade from Users
+    cursor = conn.cursor()
+    try:
+        for table in ("Personnel_Unavailability", "Shifts_Roster", "Personnel", "Positions", "Roles"):
+            cursor.execute(f"DELETE FROM {table} WHERE User_ID = %s", (user_id,))
+        cursor.execute("DELETE FROM Users WHERE ID = %s", (user_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+
+
 # --- Scheduler queries ---
 
 def get_unfilled_shifts(conn, user_id):

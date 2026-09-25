@@ -13,6 +13,8 @@ services:
         value: "true"
       - key: STORAGE_SECRET
         generateValue: true
+      - key: ADMIN_USERNAME
+        sync: false
       - key: DB_SSL_VERIFY_CERT
         value: "true"
       - key: DATABASE_URL

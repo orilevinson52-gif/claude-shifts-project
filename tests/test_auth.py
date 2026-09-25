@@ -53,3 +53,29 @@ def test_authenticate_with_empty_credentials_skips_the_database(monkeypatch):
 
     assert auth.authenticate("", "whatever") is None
     assert auth.authenticate("user", "") is None
+
+
+@pytest.mark.parametrize(
+    "username, admin_username, expected",
+    [
+        ("ori", "ori", True),
+        ("Ori", "ori", True),  # usernames are unique case-insensitively
+        (" ori ", "ori", True),
+        ("someone", "ori", False),
+        ("ori", "", False),  # no admin configured -> nobody is admin
+        ("", "", False),
+        (None, "ori", False),
+    ],
+)
+def test_is_admin(username, admin_username, expected):
+    assert auth.is_admin(username, admin_username) is expected
+
+
+def test_reset_password_rejects_short_password_before_touching_the_database(monkeypatch):
+    def fail_if_called():
+        raise AssertionError("database should not be reached for invalid input")
+
+    monkeypatch.setattr(auth, "get_connection", fail_if_called)
+
+    with pytest.raises(auth.RegistrationError):
+        auth.reset_password(1, "short")

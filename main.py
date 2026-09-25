@@ -1,8 +1,11 @@
 from fastapi.responses import RedirectResponse
 from nicegui import app, ui
 
+from auth import is_admin
 from config import APP_PORT, AUTO_INIT_DB, STORAGE_SECRET
+from db.connection import get_connection, get_user_by_id
 from pages import (
+    admin_page,
     constraints_page,
     login_page,
     personnel_page,
@@ -135,11 +138,27 @@ def index():
         return RedirectResponse("/login")
     user_id = app.storage.user["user_id"]
 
+    try:
+        conn = get_connection()
+        try:
+            user = get_user_by_id(conn, user_id)
+        finally:
+            conn.close()
+    except Exception as e:
+        apply_theme()
+        ui.label(f"שגיאת תקשורת עם מסד הנתונים: {e}").classes("text-negative")
+        return
+    if user is None:
+        # Account was deleted while this browser was still logged in
+        app.storage.user.clear()
+        return RedirectResponse("/login")
+    show_admin = is_admin(user["Username"])
+
     apply_theme()
     with ui.row().classes("w-full items-center justify-between q-mb-md"):
         ui.label("מערכת שיבוץ משמרות").classes("rc-title text-2xl")
         with ui.row().classes("items-center gap-2"):
-            ui.label(f"מחובר כ־{app.storage.user.get('username', '')}").classes("text-sm text-grey-7")
+            ui.label(f"מחובר כ־{user['Username']}").classes("text-sm text-grey-7")
             ui.button("התנתק", icon="logout", on_click=log_out).props("flat dense")
 
     with ui.tabs().classes("w-full") as tabs:
@@ -149,6 +168,8 @@ def index():
         shifts_tab = ui.tab("משמרות")
         constraints_tab = ui.tab("אילוצים")
         schedule_tab = ui.tab("שיבוץ")
+        if show_admin:
+            admin_tab = ui.tab("ניהול משתמשים")
 
     with ui.tab_panels(tabs, value=personnel_tab).classes("w-full").style("background: transparent"):
         with ui.tab_panel(personnel_tab):
@@ -163,6 +184,9 @@ def index():
             constraints_page.build(user_id)
         with ui.tab_panel(schedule_tab):
             schedule_page.build(user_id)
+        if show_admin:
+            with ui.tab_panel(admin_tab):
+                admin_page.build(user_id)
 
 
 @app.get("/health")

@@ -4,7 +4,8 @@ import secrets
 
 import mysql.connector
 
-from db.connection import create_user, get_connection, get_user_by_username
+from config import ADMIN_USERNAME
+from db.connection import create_user, get_connection, get_user_by_username, set_user_password
 from scripts.init_db import seed_default_roles
 
 PBKDF2_ITERATIONS = 600_000
@@ -14,7 +15,7 @@ MIN_PASSWORD_LENGTH = 8
 
 
 class RegistrationError(Exception):
-    """Raised with a user-facing (Hebrew) message when sign-up is rejected."""
+    """Raised with a user-facing (Hebrew) message when sign-up or a password change is rejected."""
 
 
 def hash_password(password):
@@ -36,6 +37,29 @@ def verify_password(password, stored_hash):
     return hmac.compare_digest(digest.hex(), digest_hex)
 
 
+def validate_password(password):
+    if len(password or "") < MIN_PASSWORD_LENGTH:
+        raise RegistrationError(f"הסיסמה חייבת להכיל לפחות {MIN_PASSWORD_LENGTH} תווים")
+
+
+def is_admin(username, admin_username=None):
+    """True only for the configured admin account; with no admin configured, nobody is."""
+    admin_username = ADMIN_USERNAME if admin_username is None else admin_username
+    if not admin_username or not username:
+        return False
+    # Usernames are unique case-insensitively in the DB, so compare the same way
+    return username.strip().casefold() == admin_username.strip().casefold()
+
+
+def reset_password(user_id, new_password):
+    validate_password(new_password)
+    conn = get_connection()
+    try:
+        set_user_password(conn, user_id, hash_password(new_password))
+    finally:
+        conn.close()
+
+
 def register(username, password):
     """Creates an account with the default roles and returns its user ID."""
     username = (username or "").strip()
@@ -45,8 +69,7 @@ def register(username, password):
         raise RegistrationError(
             f"שם המשתמש חייב להכיל בין {MIN_USERNAME_LENGTH} ל־{MAX_USERNAME_LENGTH} תווים"
         )
-    if len(password) < MIN_PASSWORD_LENGTH:
-        raise RegistrationError(f"הסיסמה חייבת להכיל לפחות {MIN_PASSWORD_LENGTH} תווים")
+    validate_password(password)
 
     conn = get_connection()
     try:

@@ -83,3 +83,6 @@ if not STORAGE_SECRET:
     if os.getenv("RENDER"):
         raise RuntimeError("STORAGE_SECRET environment variable must be set in production")
     STORAGE_SECRET = "local-dev-only-secret"
+
+# The one account allowed to see the user-management tab. Unset means no admin.
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip()
