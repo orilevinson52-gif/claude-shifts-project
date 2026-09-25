@@ -18,13 +18,31 @@ from config import DB_CONFIG, DB_NAME
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("init_db")
 
+# Every data table carries User_ID: each account has its own isolated data.
+# Name-keyed tables use (User_ID, name) keys so different users can reuse names.
 TABLE_QUERIES = [
+    (
+        "Users",
+        """
+        CREATE TABLE IF NOT EXISTS Users (
+            ID INT AUTO_INCREMENT PRIMARY KEY,
+            Username VARCHAR(50) NOT NULL,
+            Password_Hash VARCHAR(255) NOT NULL,
+            Created_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_users_username UNIQUE (Username)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        """,
+    ),
     (
         "Roles",
         """
         CREATE TABLE IF NOT EXISTS Roles (
-            Role_Name VARCHAR(50) PRIMARY KEY,
-            Max_Shifts_Per_Week INT NULL
+            User_ID INT NOT NULL,
+            Role_Name VARCHAR(50) NOT NULL,
+            Max_Shifts_Per_Week INT NULL,
+            PRIMARY KEY (User_ID, Role_Name),
+            CONSTRAINT fk_roles_user
+                FOREIGN KEY (User_ID) REFERENCES Users(ID)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         """,
     ),
@@ -33,11 +51,14 @@ TABLE_QUERIES = [
         """
         CREATE TABLE IF NOT EXISTS Personnel (
             ID INT AUTO_INCREMENT PRIMARY KEY,
+            User_ID INT NOT NULL,
             Full_Name VARCHAR(100) NOT NULL,
             Role VARCHAR(50) NOT NULL,
             Total_Hours_Done DECIMAL(6, 2) NOT NULL DEFAULT 0.00,
+            CONSTRAINT fk_personnel_user
+                FOREIGN KEY (User_ID) REFERENCES Users(ID),
             CONSTRAINT fk_personnel_role
-                FOREIGN KEY (Role) REFERENCES Roles(Role_Name)
+                FOREIGN KEY (User_ID, Role) REFERENCES Roles(User_ID, Role_Name)
                 ON UPDATE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         """,
@@ -46,10 +67,14 @@ TABLE_QUERIES = [
         "Positions",
         """
         CREATE TABLE IF NOT EXISTS Positions (
-            Position_Name VARCHAR(100) PRIMARY KEY,
+            User_ID INT NOT NULL,
+            Position_Name VARCHAR(100) NOT NULL,
             Required_Role VARCHAR(50) NOT NULL,
+            PRIMARY KEY (User_ID, Position_Name),
+            CONSTRAINT fk_positions_user
+                FOREIGN KEY (User_ID) REFERENCES Users(ID),
             CONSTRAINT fk_position_role
-                FOREIGN KEY (Required_Role) REFERENCES Roles(Role_Name)
+                FOREIGN KEY (User_ID, Required_Role) REFERENCES Roles(User_ID, Role_Name)
                 ON UPDATE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         """,
@@ -59,13 +84,16 @@ TABLE_QUERIES = [
         """
         CREATE TABLE IF NOT EXISTS Shifts_Roster (
             Shift_ID INT AUTO_INCREMENT PRIMARY KEY,
+            User_ID INT NOT NULL,
             Date DATE NOT NULL,
             Start_Time DATETIME NOT NULL,
             End_Time DATETIME NOT NULL,
             Position_Name VARCHAR(100) NOT NULL,
             Assigned_Person_ID INT NULL,
+            CONSTRAINT fk_shifts_user
+                FOREIGN KEY (User_ID) REFERENCES Users(ID),
             CONSTRAINT fk_shift_position
-                FOREIGN KEY (Position_Name) REFERENCES Positions(Position_Name)
+                FOREIGN KEY (User_ID, Position_Name) REFERENCES Positions(User_ID, Position_Name)
                 ON UPDATE CASCADE,
             CONSTRAINT fk_shift_person
                 FOREIGN KEY (Assigned_Person_ID) REFERENCES Personnel(ID)
@@ -80,10 +108,13 @@ TABLE_QUERIES = [
         """
         CREATE TABLE IF NOT EXISTS Personnel_Unavailability (
             ID INT AUTO_INCREMENT PRIMARY KEY,
+            User_ID INT NOT NULL,
             Person_ID INT NOT NULL,
             Start_Date DATE NOT NULL,
             End_Date DATE NOT NULL,
             Reason VARCHAR(200) NULL,
+            CONSTRAINT fk_unavailability_user
+                FOREIGN KEY (User_ID) REFERENCES Users(ID),
             CONSTRAINT fk_unavailability_person
                 FOREIGN KEY (Person_ID) REFERENCES Personnel(ID)
                 ON DELETE CASCADE,
@@ -93,6 +124,9 @@ TABLE_QUERIES = [
         """,
     ),
 ]
+
+# Tables from the pre-accounts schema, in safe drop order (children first)
+LEGACY_TABLES = ["Personnel_Unavailability", "Shifts_Roster", "Personnel", "Positions", "Roles"]
 
 DEFAULT_ROLES = [
     ("לוחם", None),
@@ -123,10 +157,50 @@ def ensure_database():
         conn.close()
 
 
+def _has_legacy_schema(cursor):
+    """True if Roles exists but predates accounts (no User_ID column)."""
+    cursor.execute(
+        """
+        SELECT
+            SUM(LOWER(COLUMN_NAME) = 'role_name'),
+            SUM(LOWER(COLUMN_NAME) = 'user_id')
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = %s AND LOWER(TABLE_NAME) = 'roles'
+        """,
+        (DB_NAME,),
+    )
+    has_roles, has_user_id = cursor.fetchone()
+    return bool(has_roles) and not has_user_id
+
+
+def migrate_legacy_schema(cursor):
+    """
+    Replaces the pre-accounts tables with the per-user schema.
+    Only runs when the old tables hold nothing but the default roles; if real
+    data exists it refuses rather than delete it.
+    """
+    if not _has_legacy_schema(cursor):
+        return
+
+    for table in LEGACY_TABLES[:-1]:
+        cursor.execute(f"SELECT COUNT(*) FROM {table}")
+        count = cursor.fetchone()[0]
+        if count:
+            raise RuntimeError(
+                f"Legacy table '{table}' has {count} rows; refusing to migrate automatically. "
+                "Back up and migrate the data manually."
+            )
+
+    logger.info("Legacy schema without accounts detected and empty; recreating tables per user...")
+    for table in LEGACY_TABLES:
+        cursor.execute(f"DROP TABLE IF EXISTS {table}")
+        logger.info("Dropped legacy table '%s'.", table)
+
+
 def ensure_schema(conn=None):
     """
     Verifies that all required tables exist. If missing, creates them.
-    Also ensures basic default roles exist if the Roles table is empty.
+    Migrates an empty pre-accounts schema to the per-user schema first.
     """
     should_close = False
     if conn is None:
@@ -137,23 +211,13 @@ def ensure_schema(conn=None):
     try:
         cursor = conn.cursor()
 
-        # 1. Create tables
+        migrate_legacy_schema(cursor)
+
         for table_name, query in TABLE_QUERIES:
             cursor.execute(query)
             logger.info("Table '%s' checked/created successfully.", table_name)
 
-        # 2. Seed basic roles if Roles table is completely empty
-        cursor.execute("SELECT COUNT(*) FROM Roles")
-        roles_count = cursor.fetchone()[0]
-        if roles_count == 0:
-            logger.info("Seeding initial default roles...")
-            cursor.executemany(
-                "INSERT INTO Roles (Role_Name, Max_Shifts_Per_Week) VALUES (%s, %s)",
-                DEFAULT_ROLES,
-            )
-            conn.commit()
-            logger.info("Default roles created: %s", [r[0] for r in DEFAULT_ROLES])
-
+        conn.commit()
         cursor.close()
         logger.info("Database schema is ready.")
         return True
@@ -162,9 +226,19 @@ def ensure_schema(conn=None):
             conn.close()
 
 
-def seed_sample_data(conn=None):
+def seed_default_roles(conn, user_id):
+    """Gives a new account the standard starting roles. Caller commits."""
+    cursor = conn.cursor()
+    cursor.executemany(
+        "INSERT INTO Roles (User_ID, Role_Name, Max_Shifts_Per_Week) VALUES (%s, %s, %s)",
+        [(user_id, name, max_shifts) for name, max_shifts in DEFAULT_ROLES],
+    )
+    cursor.close()
+
+
+def seed_sample_data(user_id, conn=None):
     """
-    Populates sample personnel and positions if requested.
+    Populates sample personnel and positions for one account if it has none.
     """
     should_close = False
     if conn is None:
@@ -174,8 +248,7 @@ def seed_sample_data(conn=None):
     try:
         cursor = conn.cursor()
 
-        # Seed sample personnel if empty
-        cursor.execute("SELECT COUNT(*) FROM Personnel")
+        cursor.execute("SELECT COUNT(*) FROM Personnel WHERE User_ID = %s", (user_id,))
         if cursor.fetchone()[0] == 0:
             sample_personnel = [
                 ("דניאל כהן", "לוחם"),
@@ -185,13 +258,12 @@ def seed_sample_data(conn=None):
                 ("אלון שחר", "סייר"),
             ]
             cursor.executemany(
-                "INSERT INTO Personnel (Full_Name, Role) VALUES (%s, %s)",
-                sample_personnel,
+                "INSERT INTO Personnel (User_ID, Full_Name, Role) VALUES (%s, %s, %s)",
+                [(user_id, name, role) for name, role in sample_personnel],
             )
             logger.info("Sample personnel seeded (%d records).", len(sample_personnel))
 
-        # Seed sample positions if empty
-        cursor.execute("SELECT COUNT(*) FROM Positions")
+        cursor.execute("SELECT COUNT(*) FROM Positions WHERE User_ID = %s", (user_id,))
         if cursor.fetchone()[0] == 0:
             sample_positions = [
                 ("שער ראשי", "מאבטח"),
@@ -200,8 +272,8 @@ def seed_sample_data(conn=None):
                 ("עמדה קדמית", "לוחם"),
             ]
             cursor.executemany(
-                "INSERT INTO Positions (Position_Name, Required_Role) VALUES (%s, %s)",
-                sample_positions,
+                "INSERT INTO Positions (User_ID, Position_Name, Required_Role) VALUES (%s, %s, %s)",
+                [(user_id, name, role) for name, role in sample_positions],
             )
             logger.info("Sample positions seeded (%d records).", len(sample_positions))
 
@@ -214,14 +286,16 @@ def seed_sample_data(conn=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Initialize Shift Scheduler Database Schema")
-    parser.add_argument("--seed", action="store_true", help="Seed sample personnel and positions")
+    parser.add_argument(
+        "--seed-user-id", type=int, help="Seed sample personnel and positions for this user ID"
+    )
     args = parser.parse_args()
 
     logger.info("Connecting to MySQL (%s:%s / %s)...", DB_CONFIG.get("host"), DB_CONFIG.get("port"), DB_CONFIG.get("database"))
     try:
         ensure_schema()
-        if args.seed:
-            seed_sample_data()
+        if args.seed_user_id:
+            seed_sample_data(args.seed_user_id)
         print("\n[SUCCESS] מסד הנתונים מוכן ומאומת בהצלחה!")
     except Exception as e:
         logger.error("Database initialization failed: %s", e)

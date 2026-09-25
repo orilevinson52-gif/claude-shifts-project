@@ -75,4 +75,11 @@ if os.getenv("DB_SSL_DISABLED", "").lower() in ("1", "true", "yes"):
 MIN_REST_HOURS = 8
 APP_PORT = int(os.getenv("PORT", "8080"))
 AUTO_INIT_DB = os.getenv("AUTO_INIT_DB", "true").lower() in ("1", "true", "yes")
-SEED_INITIAL_DATA = os.getenv("SEED_INITIAL_DATA", "false").lower() in ("1", "true", "yes")
+
+# Signs the login session cookie. Required in production (Render sets RENDER=true);
+# a fixed fallback keeps local development working without extra setup.
+STORAGE_SECRET = os.getenv("STORAGE_SECRET")
+if not STORAGE_SECRET:
+    if os.getenv("RENDER"):
+        raise RuntimeError("STORAGE_SECRET environment variable must be set in production")
+    STORAGE_SECRET = "local-dev-only-secret"

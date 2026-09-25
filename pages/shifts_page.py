@@ -76,7 +76,7 @@ def date_time_field(label, value=""):
     return field
 
 
-def build():
+def build(user_id):
     week_state = {"start": None}
     template = {}  # {position_name: {day_index(0-6): [(start_str, end_str), ...]}}
 
@@ -98,7 +98,7 @@ def build():
 
         conn = get_connection()
         try:
-            positions = [p["Position_Name"] for p in get_all_positions(conn)]
+            positions = [p["Position_Name"] for p in get_all_positions(conn, user_id)]
         finally:
             conn.close()
 
@@ -198,7 +198,7 @@ def build():
 
         conn = get_connection()
         try:
-            existing = get_all_shifts(conn)
+            existing = get_all_shifts(conn, user_id)
             existing_keys = {
                 (row["Date"], row["Position_Name"], row["Start_Time"].strftime("%H:%M")) for row in existing
             }
@@ -214,7 +214,7 @@ def build():
                         end_dt = datetime.combine(shift_date, datetime.strptime(end_val, "%H:%M").time())
                         if end_dt <= start_dt:
                             end_dt += timedelta(days=1)
-                        create_shift(conn, shift_date, start_dt, end_dt, position)
+                        create_shift(conn, user_id, shift_date, start_dt, end_dt, position)
                         created += 1
         finally:
             conn.close()
@@ -245,7 +245,7 @@ def build():
         try:
             conn = get_connection()
             try:
-                rows = get_all_shifts(conn)
+                rows = get_all_shifts(conn, user_id)
             finally:
                 conn.close()
             table.rows = format_rows(rows)
@@ -258,7 +258,7 @@ def build():
 
         conn = get_connection()
         try:
-            positions = [p["Position_Name"] for p in get_all_positions(conn)]
+            positions = [p["Position_Name"] for p in get_all_positions(conn, user_id)]
         finally:
             conn.close()
 
@@ -294,9 +294,9 @@ def build():
                 conn = get_connection()
                 try:
                     if is_edit:
-                        update_shift(conn, row["Shift_ID"], date_input.value, start_dt, end_dt, position_select.value)
+                        update_shift(conn, user_id, row["Shift_ID"], date_input.value, start_dt, end_dt, position_select.value)
                     else:
-                        create_shift(conn, date_input.value, start_dt, end_dt, position_select.value)
+                        create_shift(conn, user_id, date_input.value, start_dt, end_dt, position_select.value)
                 finally:
                     conn.close()
                 dialog.close()
@@ -315,7 +315,7 @@ def build():
             def do_delete():
                 conn = get_connection()
                 try:
-                    delete_shift(conn, row["Shift_ID"])
+                    delete_shift(conn, user_id, row["Shift_ID"])
                 finally:
                     conn.close()
                 dialog.close()
@@ -334,7 +334,7 @@ def build():
             def do_clear():
                 conn = get_connection()
                 try:
-                    delete_all_shifts(conn)
+                    delete_all_shifts(conn, user_id)
                 finally:
                     conn.close()
                 dialog.close()

@@ -62,7 +62,7 @@ def build_tables_by_position(rows):
     return tables
 
 
-def build():
+def build(user_id):
     status_container = ui.column().classes("w-full")
 
     with ui.row():
@@ -79,8 +79,8 @@ def build():
         try:
             conn = get_connection()
             try:
-                roster_rows = get_full_roster(conn)
-                hours_rows = get_hours_summary(conn)
+                roster_rows = get_full_roster(conn, user_id)
+                hours_rows = get_hours_summary(conn, user_id)
             finally:
                 conn.close()
         except Exception as e:
@@ -125,7 +125,7 @@ def build():
     def on_generate():
         conn = get_connection()
         try:
-            result = generate_schedule(conn)
+            result = generate_schedule(conn, user_id)
         finally:
             conn.close()
 
@@ -154,7 +154,7 @@ def build():
                 def confirm_clear():
                     conn = get_connection()
                     try:
-                        clear_all_assignments(conn)
+                        clear_all_assignments(conn, user_id)
                     finally:
                         conn.close()
                     dialog.close()

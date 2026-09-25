@@ -37,7 +37,7 @@ HOURS_SLOT = """
 """
 
 
-def build():
+def build(user_id):
     with ui.row():
         ui.button("+ הוסף איש צוות", icon="add", color="primary", on_click=lambda: open_form())
         clear_button = ui.button("נקה את כל אנשי הצוות", icon="delete_sweep", color="negative")
@@ -51,7 +51,7 @@ def build():
         try:
             conn = get_connection()
             try:
-                rows = get_all_personnel(conn)
+                rows = get_all_personnel(conn, user_id)
             finally:
                 conn.close()
             table.rows = rows
@@ -64,7 +64,7 @@ def build():
 
         conn = get_connection()
         try:
-            roles = [r["Role_Name"] for r in get_all_roles(conn)]
+            roles = [r["Role_Name"] for r in get_all_roles(conn, user_id)]
         finally:
             conn.close()
 
@@ -88,9 +88,9 @@ def build():
                 conn = get_connection()
                 try:
                     if is_edit:
-                        update_person(conn, row["ID"], name_input.value.strip(), role_select.value)
+                        update_person(conn, user_id, row["ID"], name_input.value.strip(), role_select.value)
                     else:
-                        create_person(conn, name_input.value.strip(), role_select.value)
+                        create_person(conn, user_id, name_input.value.strip(), role_select.value)
                 finally:
                     conn.close()
                 dialog.close()
@@ -109,7 +109,7 @@ def build():
             def do_delete():
                 conn = get_connection()
                 try:
-                    delete_person(conn, row["ID"])
+                    delete_person(conn, user_id, row["ID"])
                 finally:
                     conn.close()
                 dialog.close()
@@ -128,7 +128,7 @@ def build():
             def do_clear():
                 conn = get_connection()
                 try:
-                    delete_all_personnel(conn)
+                    delete_all_personnel(conn, user_id)
                 finally:
                     conn.close()
                 dialog.close()

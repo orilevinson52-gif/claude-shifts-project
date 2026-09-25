@@ -31,7 +31,7 @@ ROLE_SLOT = """
 """
 
 
-def build():
+def build(user_id):
     with ui.row():
         ui.button("+ הוסף עמדה", icon="add", color="primary", on_click=lambda: open_form())
         clear_button = ui.button("נקה את כל העמדות", icon="delete_sweep", color="negative")
@@ -44,7 +44,7 @@ def build():
         try:
             conn = get_connection()
             try:
-                rows = get_all_positions(conn)
+                rows = get_all_positions(conn, user_id)
             finally:
                 conn.close()
             table.rows = rows
@@ -57,7 +57,7 @@ def build():
 
         conn = get_connection()
         try:
-            roles = [r["Role_Name"] for r in get_all_roles(conn)]
+            roles = [r["Role_Name"] for r in get_all_roles(conn, user_id)]
         finally:
             conn.close()
 
@@ -81,9 +81,9 @@ def build():
                 conn = get_connection()
                 try:
                     if is_edit:
-                        update_position(conn, row["Position_Name"], name_input.value.strip(), role_select.value)
+                        update_position(conn, user_id, row["Position_Name"], name_input.value.strip(), role_select.value)
                     else:
-                        create_position(conn, name_input.value.strip(), role_select.value)
+                        create_position(conn, user_id, name_input.value.strip(), role_select.value)
                 except mysql.connector.IntegrityError:
                     ui.notify("עמדה בשם הזה כבר קיימת", color="negative")
                     return
@@ -105,7 +105,7 @@ def build():
             def do_delete():
                 conn = get_connection()
                 try:
-                    delete_position(conn, row["Position_Name"])
+                    delete_position(conn, user_id, row["Position_Name"])
                 except mysql.connector.IntegrityError:
                     ui.notify("לא ניתן למחוק עמדה שיש לה משמרות משויכות", color="negative")
                     dialog.close()
@@ -128,7 +128,7 @@ def build():
             def do_clear():
                 conn = get_connection()
                 try:
-                    delete_all_positions(conn)
+                    delete_all_positions(conn, user_id)
                 except mysql.connector.IntegrityError:
                     ui.notify("לא ניתן לנקות עמדות שיש להן משמרות משויכות", color="negative")
                     dialog.close()

@@ -41,7 +41,7 @@ ACTIONS_SLOT = """
 """
 
 
-def build():
+def build(user_id):
     with ui.row():
         ui.button("+ הוסף תפקיד", icon="add", color="primary", on_click=lambda: open_form())
         clear_button = ui.button("נקה את כל התפקידים", icon="delete_sweep", color="negative")
@@ -55,7 +55,7 @@ def build():
         try:
             conn = get_connection()
             try:
-                rows = get_all_roles(conn)
+                rows = get_all_roles(conn, user_id)
             finally:
                 conn.close()
             raw_rows_by_name.clear()
@@ -92,9 +92,9 @@ def build():
                 conn = get_connection()
                 try:
                     if is_edit:
-                        update_role(conn, raw["Role_Name"], name_input.value.strip(), max_shifts)
+                        update_role(conn, user_id, raw["Role_Name"], name_input.value.strip(), max_shifts)
                     else:
-                        create_role(conn, name_input.value.strip(), max_shifts)
+                        create_role(conn, user_id, name_input.value.strip(), max_shifts)
                 except mysql.connector.IntegrityError:
                     ui.notify("תפקיד בשם הזה כבר קיים", color="negative")
                     return
@@ -116,7 +116,7 @@ def build():
             def do_delete():
                 conn = get_connection()
                 try:
-                    delete_role(conn, row["Role_Name"])
+                    delete_role(conn, user_id, row["Role_Name"])
                 except mysql.connector.IntegrityError:
                     ui.notify("לא ניתן למחוק תפקיד שמשויך לאנשי צוות או לעמדות", color="negative")
                     dialog.close()
@@ -139,7 +139,7 @@ def build():
             def do_clear():
                 conn = get_connection()
                 try:
-                    delete_all_roles(conn)
+                    delete_all_roles(conn, user_id)
                 except mysql.connector.IntegrityError:
                     ui.notify("לא ניתן לנקות תפקידים שמשויכים לאנשי צוות או לעמדות", color="negative")
                     dialog.close()

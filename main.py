@@ -1,15 +1,17 @@
+from fastapi.responses import RedirectResponse
 from nicegui import app, ui
 
-from config import APP_PORT, AUTO_INIT_DB, SEED_INITIAL_DATA
+from config import APP_PORT, AUTO_INIT_DB, STORAGE_SECRET
 from pages import (
     constraints_page,
+    login_page,
     personnel_page,
     positions_page,
     roles_page,
     schedule_page,
     shifts_page,
 )
-from scripts.init_db import ensure_schema, seed_sample_data
+from scripts.init_db import ensure_schema
 
 ui.add_head_html(
     """
@@ -90,8 +92,7 @@ ui.add_head_html(
 )
 
 
-@ui.page("/")
-def index():
+def apply_theme():
     ui.colors(
         primary="oklch(0.64 0.17 55)",
         secondary="oklch(0.48 0.11 195)",
@@ -101,7 +102,45 @@ def index():
         warning="oklch(0.64 0.17 55)",
         info="oklch(0.48 0.11 195)",
     )
-    ui.label("מערכת שיבוץ משמרות").classes("rc-title text-2xl q-mb-md")
+
+
+def is_logged_in():
+    return app.storage.user.get("user_id") is not None
+
+
+def log_out():
+    app.storage.user.clear()
+    ui.navigate.to("/login")
+
+
+@ui.page("/login")
+def login():
+    if is_logged_in():
+        return RedirectResponse("/")
+    apply_theme()
+    login_page.build_login()
+
+
+@ui.page("/signup")
+def signup():
+    if is_logged_in():
+        return RedirectResponse("/")
+    apply_theme()
+    login_page.build_signup()
+
+
+@ui.page("/")
+def index():
+    if not is_logged_in():
+        return RedirectResponse("/login")
+    user_id = app.storage.user["user_id"]
+
+    apply_theme()
+    with ui.row().classes("w-full items-center justify-between q-mb-md"):
+        ui.label("מערכת שיבוץ משמרות").classes("rc-title text-2xl")
+        with ui.row().classes("items-center gap-2"):
+            ui.label(f"מחובר כ־{app.storage.user.get('username', '')}").classes("text-sm text-grey-7")
+            ui.button("התנתק", icon="logout", on_click=log_out).props("flat dense")
 
     with ui.tabs().classes("w-full") as tabs:
         personnel_tab = ui.tab("אנשי צוות")
@@ -113,17 +152,17 @@ def index():
 
     with ui.tab_panels(tabs, value=personnel_tab).classes("w-full").style("background: transparent"):
         with ui.tab_panel(personnel_tab):
-            personnel_page.build()
+            personnel_page.build(user_id)
         with ui.tab_panel(roles_tab):
-            roles_page.build()
+            roles_page.build(user_id)
         with ui.tab_panel(positions_tab):
-            positions_page.build()
+            positions_page.build(user_id)
         with ui.tab_panel(shifts_tab):
-            shifts_page.build()
+            shifts_page.build(user_id)
         with ui.tab_panel(constraints_tab):
-            constraints_page.build()
+            constraints_page.build(user_id)
         with ui.tab_panel(schedule_tab):
-            schedule_page.build()
+            schedule_page.build(user_id)
 
 
 @app.get("/health")
@@ -136,8 +175,6 @@ def on_startup():
     if AUTO_INIT_DB:
         try:
             ensure_schema()
-            if SEED_INITIAL_DATA:
-                seed_sample_data()
         except Exception as exc:
             print(f"[WARN] Startup database verification: {exc}")
 
@@ -150,4 +187,5 @@ if __name__ in {"__main__", "__mp_main__"}:
         reload=False,
         show=False,
         forwarded_allow_ips="*",
+        storage_secret=STORAGE_SECRET,
     )

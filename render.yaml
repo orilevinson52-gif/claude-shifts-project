@@ -11,6 +11,8 @@ services:
         value: 3.11.9
       - key: AUTO_INIT_DB
         value: "true"
+      - key: STORAGE_SECRET
+        generateValue: true
       - key: DB_SSL_VERIFY_CERT
         value: "true"
       - key: DATABASE_URL

@@ -31,6 +31,7 @@ def is_unavailable(shift_date, ranges):
 
 def find_best_candidate(
     conn,
+    user_id,
     shift,
     last_shift_end_cache,
     hours_done_cache,
@@ -38,24 +39,24 @@ def find_best_candidate(
     role_max_cache,
     weekly_count_cache,
 ):
-    role = get_position_required_role(conn, shift["Position_Name"])
+    role = get_position_required_role(conn, user_id, shift["Position_Name"])
     if role is None:
         return None
 
     if role not in role_max_cache:
-        role_max_cache[role] = get_role_max_shifts_per_week(conn, role)
+        role_max_cache[role] = get_role_max_shifts_per_week(conn, user_id, role)
     role_max = role_max_cache[role]
 
     week_start, week_end = week_bounds(shift["Date"])
 
-    candidates = get_available_personnel(conn, role)
+    candidates = get_available_personnel(conn, user_id, role)
     valid_candidates = []
 
     for person in candidates:
         person_id = person["ID"]
 
         if person_id not in last_shift_end_cache:
-            last_shift_end_cache[person_id] = get_last_shift_end(conn, person_id)
+            last_shift_end_cache[person_id] = get_last_shift_end(conn, user_id, person_id)
         last_end = last_shift_end_cache[person_id]
 
         if last_end is not None:
@@ -64,14 +65,14 @@ def find_best_candidate(
                 continue
 
         if person_id not in unavailability_cache:
-            unavailability_cache[person_id] = get_unavailability_ranges_for_person(conn, person_id)
+            unavailability_cache[person_id] = get_unavailability_ranges_for_person(conn, user_id, person_id)
         if is_unavailable(shift["Date"], unavailability_cache[person_id]):
             continue
 
         if role_max is not None:
             week_key = (person_id, week_start)
             if week_key not in weekly_count_cache:
-                weekly_count_cache[week_key] = get_weekly_shift_count(conn, person_id, week_start, week_end)
+                weekly_count_cache[week_key] = get_weekly_shift_count(conn, user_id, person_id, week_start, week_end)
             if weekly_count_cache[week_key] >= role_max:
                 continue
 
@@ -87,8 +88,8 @@ def find_best_candidate(
     return valid_candidates[0][0]
 
 
-def generate_schedule(conn):
-    shifts = get_unfilled_shifts(conn)
+def generate_schedule(conn, user_id):
+    shifts = get_unfilled_shifts(conn, user_id)
 
     last_shift_end_cache = {}
     hours_done_cache = {}
@@ -102,6 +103,7 @@ def generate_schedule(conn):
         for shift in shifts:
             chosen_person_id = find_best_candidate(
                 conn,
+                user_id,
                 shift,
                 last_shift_end_cache,
                 hours_done_cache,
@@ -116,8 +118,8 @@ def generate_schedule(conn):
 
             duration = shift_duration_hours(shift)
 
-            assign_shift(conn, shift["Shift_ID"], chosen_person_id)
-            update_total_hours(conn, chosen_person_id, duration)
+            assign_shift(conn, user_id, shift["Shift_ID"], chosen_person_id)
+            update_total_hours(conn, user_id, chosen_person_id, duration)
 
             hours_done_cache[chosen_person_id] += duration
             last_shift_end_cache[chosen_person_id] = shift["End_Time"]

@@ -59,7 +59,7 @@ def date_field(label, value=""):
     return field
 
 
-def build():
+def build(user_id):
     ui.label("אילוצים אישיים - תאריכים שבהם איש צוות אינו זמין (למשל חופשה, טסט וכו')").classes(
         "text-sm text-grey-7"
     )
@@ -77,7 +77,7 @@ def build():
         try:
             conn = get_connection()
             try:
-                rows = get_all_unavailability(conn)
+                rows = get_all_unavailability(conn, user_id)
             finally:
                 conn.close()
             table.rows = format_rows(rows)
@@ -88,7 +88,7 @@ def build():
     def open_form():
         conn = get_connection()
         try:
-            personnel = [(p["ID"], p["Full_Name"]) for p in get_all_personnel(conn)]
+            personnel = [(p["ID"], p["Full_Name"]) for p in get_all_personnel(conn, user_id)]
         finally:
             conn.close()
 
@@ -116,6 +116,7 @@ def build():
                 try:
                     create_unavailability(
                         conn,
+                        user_id,
                         person_select.value,
                         start_input.value,
                         end_input.value,
@@ -139,7 +140,7 @@ def build():
             def do_delete():
                 conn = get_connection()
                 try:
-                    delete_unavailability(conn, row["ID"])
+                    delete_unavailability(conn, user_id, row["ID"])
                 finally:
                     conn.close()
                 dialog.close()
@@ -158,7 +159,7 @@ def build():
             def do_clear():
                 conn = get_connection()
                 try:
-                    delete_all_unavailability(conn)
+                    delete_all_unavailability(conn, user_id)
                 finally:
                     conn.close()
                 dialog.close()
