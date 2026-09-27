@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from config import MIN_REST_HOURS
 from db.connection import (
     assign_shift,
@@ -12,17 +10,11 @@ from db.connection import (
     get_weekly_shift_count,
     update_total_hours,
 )
+from scheduler.rules import week_bounds
 
 
 def shift_duration_hours(shift):
     return round((shift["End_Time"] - shift["Start_Time"]).total_seconds() / 3600, 2)
-
-
-def week_bounds(day):
-    days_since_sunday = (day.weekday() + 1) % 7
-    week_start = day - timedelta(days=days_since_sunday)
-    week_end = week_start + timedelta(days=6)
-    return week_start, week_end
 
 
 def is_unavailable(shift_date, ranges):

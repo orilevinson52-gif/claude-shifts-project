@@ -1,5 +1,5 @@
 mysql-connector-python
-nicegui
+nicegui==3.6.1
 plotly
 numpy
 pandas

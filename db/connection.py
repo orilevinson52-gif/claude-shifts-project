@@ -486,3 +486,119 @@ def get_weekly_shift_count(conn, user_id, person_id, week_start, week_end):
     count = cursor.fetchone()[0]
     cursor.close()
     return count
+
+
+# --- Board & dashboard ---
+
+def get_shifts_between(conn, user_id, start_date, end_date):
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT s.Shift_ID, s.Date, s.Start_Time, s.End_Time, s.Position_Name, po.Required_Role,
+               s.Assigned_Person_ID, p.Full_Name AS Assigned_Name, p.Role AS Assigned_Role
+        FROM Shifts_Roster s
+        JOIN Positions po ON po.User_ID = s.User_ID AND po.Position_Name = s.Position_Name
+        LEFT JOIN Personnel p ON p.ID = s.Assigned_Person_ID AND p.User_ID = s.User_ID
+        WHERE s.User_ID = %s AND s.Date BETWEEN %s AND %s
+        ORDER BY s.Start_Time, s.Position_Name
+        """,
+        (user_id, start_date, end_date),
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    return rows
+
+
+def get_all_assignments(conn, user_id):
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT Shift_ID, Assigned_Person_ID AS Person_ID, Date, Start_Time, End_Time
+        FROM Shifts_Roster
+        WHERE User_ID = %s AND Assigned_Person_ID IS NOT NULL
+        """,
+        (user_id,),
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    return rows
+
+
+def set_shift_assignment(conn, user_id, shift_id, person_id):
+    """
+    Assigns (or with person_id=None, unassigns) a shift and moves its hours
+    from the previous person's total to the new one's, in one transaction.
+    """
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT Assigned_Person_ID, TIMESTAMPDIFF(MINUTE, Start_Time, End_Time) / 60 AS Hours
+            FROM Shifts_Roster WHERE User_ID = %s AND Shift_ID = %s FOR UPDATE
+            """,
+            (user_id, shift_id),
+        )
+        shift = cursor.fetchone()
+        if shift is None:
+            conn.rollback()
+            return False
+        hours = shift["Hours"]
+        previous = shift["Assigned_Person_ID"]
+        if previous is not None:
+            cursor.execute(
+                """
+                UPDATE Personnel SET Total_Hours_Done = GREATEST(Total_Hours_Done - %s, 0)
+                WHERE User_ID = %s AND ID = %s
+                """,
+                (hours, user_id, previous),
+            )
+        if person_id is not None:
+            cursor.execute(
+                "UPDATE Personnel SET Total_Hours_Done = Total_Hours_Done + %s WHERE User_ID = %s AND ID = %s",
+                (hours, user_id, person_id),
+            )
+        cursor.execute(
+            "UPDATE Shifts_Roster SET Assigned_Person_ID = %s WHERE User_ID = %s AND Shift_ID = %s",
+            (person_id, user_id, shift_id),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+
+
+def clear_assignments_between(conn, user_id, start_date, end_date):
+    """Unassigns every shift in the date range and takes those hours off the totals."""
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE Personnel p
+            JOIN (
+                SELECT Assigned_Person_ID AS Person_ID,
+                       SUM(TIMESTAMPDIFF(MINUTE, Start_Time, End_Time)) / 60 AS Hours
+                FROM Shifts_Roster
+                WHERE User_ID = %s AND Assigned_Person_ID IS NOT NULL AND Date BETWEEN %s AND %s
+                GROUP BY Assigned_Person_ID
+            ) w ON w.Person_ID = p.ID
+            SET p.Total_Hours_Done = GREATEST(p.Total_Hours_Done - w.Hours, 0)
+            WHERE p.User_ID = %s
+            """,
+            (user_id, start_date, end_date, user_id),
+        )
+        cursor.execute(
+            """
+            UPDATE Shifts_Roster SET Assigned_Person_ID = NULL
+            WHERE User_ID = %s AND Date BETWEEN %s AND %s
+            """,
+            (user_id, start_date, end_date),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()

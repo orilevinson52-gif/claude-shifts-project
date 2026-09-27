@@ -25,7 +25,7 @@ ACTIONS_SLOT = """
 """
 
 MONO_SLOT = """
-    <q-td :props="props" class="rc-mono">
+    <q-td :props="props" class="mono">
         {{ props.value }}
     </q-td>
 """
@@ -51,8 +51,9 @@ def format_rows(rows, admin_user_id):
 
 
 def build(admin_user_id):
-    ui.label("ניהול משתמשים").classes("rc-heading text-lg")
-    summary_label = ui.label().classes("text-sm text-grey-7 q-mb-md")
+    with ui.element("header").classes("flex flex-col gap-1"):
+        summary_label = ui.label().classes("muted text-sm")
+        ui.label("ניהול משתמשים").classes("page-title").props('role="heading" aria-level="1"')
 
     table = ui.table(columns=COLUMNS, rows=[], row_key="ID").classes("w-full")
     table.add_slot("body-cell-actions", ACTIONS_SLOT)
@@ -135,6 +136,6 @@ def build(admin_user_id):
     table.on("reset", lambda e: open_reset(e.args))
     table.on("remove", lambda e: confirm_delete(e.args))
 
-    ui.button("רענן", icon="refresh", on_click=refresh).props("flat").classes("q-mt-sm")
+    ui.button("רענן", icon="refresh", on_click=refresh).props("flat no-caps").classes("self-start")
 
     refresh()

@@ -4,107 +4,11 @@ from nicegui import app, ui
 from auth import is_admin
 from config import APP_PORT, AUTO_INIT_DB, STORAGE_SECRET
 from db.connection import get_connection, get_user_by_id
-from pages import (
-    admin_page,
-    constraints_page,
-    login_page,
-    personnel_page,
-    positions_page,
-    roles_page,
-    schedule_page,
-    shifts_page,
-)
+from pages import admin_page, board_page, dashboard_page, login_page, team_page
+from pages.ui_kit import app_shell, install_theme
 from scripts.init_db import ensure_schema
 
-ui.add_head_html(
-    """
-    <link rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700;800&family=Heebo:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
-    <style>
-    :root {
-        --rc-bg: oklch(0.97 0.005 60);
-        --rc-panel: oklch(0.995 0.002 60);
-        --rc-surface: oklch(0.94 0.007 60);
-        --rc-border: oklch(0.85 0.009 60);
-        --rc-border-soft: oklch(0.90 0.007 60);
-        --rc-text: oklch(0.20 0.01 60);
-        --rc-text-dim: oklch(0.26 0.01 60);
-        --rc-text-muted: oklch(0.46 0.012 60);
-        --rc-text-faint: oklch(0.54 0.01 60);
-        --rc-amber: oklch(0.64 0.17 55);
-        --rc-teal: oklch(0.48 0.11 195);
-        --rc-danger: oklch(0.52 0.17 25);
-        --rc-danger-bg: oklch(0.52 0.17 25 / 0.08);
-    }
-
-    body {
-        direction: rtl;
-        background: var(--rc-bg) !important;
-        color: var(--rc-text);
-        font-family: 'Heebo', system-ui, 'Segoe UI', Arial, sans-serif;
-    }
-
-    .rc-title {
-        font-family: 'Rubik', sans-serif;
-        font-weight: 800;
-        letter-spacing: -0.01em;
-        color: oklch(0.15 0.012 60);
-    }
-
-    .rc-heading {
-        font-family: 'Rubik', sans-serif;
-        font-weight: 700;
-        color: var(--rc-text-dim);
-    }
-
-    .rc-mono {
-        font-family: 'IBM Plex Mono', ui-monospace, monospace;
-        direction: ltr;
-        unicode-bidi: isolate;
-    }
-
-    .q-tabs { border-bottom: 1px solid var(--rc-border); }
-    .q-tab { font-family: 'Heebo', sans-serif; color: var(--rc-text-faint) !important; }
-    .q-tab--active { color: var(--rc-amber) !important; font-weight: 600; }
-    .q-tab__indicator { background: var(--rc-amber) !important; height: 2.5px !important; }
-
-    .q-table { background: var(--rc-panel) !important; border: 1px solid var(--rc-border); border-radius: 10px; overflow: hidden; }
-    .q-table th, .q-table td { text-align: right; border-color: var(--rc-border-soft) !important; }
-    .q-table thead th { background: var(--rc-surface) !important; color: var(--rc-text-faint) !important; font-weight: 600; font-size: 12.5px; }
-    .q-table tbody td { color: var(--rc-text-dim) !important; font-size: 14px; }
-
-    .q-card { background: var(--rc-panel) !important; }
-    .q-field__native, .q-field__label, .q-item__label { font-family: 'Heebo', sans-serif; }
-
-    .rc-pill {
-        display: inline-flex;
-        align-items: center;
-        padding: 3px 12px;
-        border-radius: 999px;
-        font-size: 12.5px;
-        font-weight: 500;
-        border: 1px solid oklch(0.48 0.11 195 / 0.35);
-        color: var(--rc-teal);
-        background: oklch(0.48 0.11 195 / 0.10);
-    }
-
-    .rc-cell-empty { color: var(--rc-danger) !important; background: var(--rc-danger-bg); }
-    </style>
-    """,
-    shared=True,
-)
-
-
-def apply_theme():
-    ui.colors(
-        primary="oklch(0.64 0.17 55)",
-        secondary="oklch(0.48 0.11 195)",
-        accent="oklch(0.48 0.11 195)",
-        negative="oklch(0.52 0.17 25)",
-        positive="oklch(0.48 0.11 195)",
-        warning="oklch(0.64 0.17 55)",
-        info="oklch(0.48 0.11 195)",
-    )
+install_theme()
 
 
 def is_logged_in():
@@ -116,77 +20,68 @@ def log_out():
     ui.navigate.to("/login")
 
 
+def current_user():
+    """The logged-in user's row; None when the account no longer exists. Raises on DB errors."""
+    conn = get_connection()
+    try:
+        return get_user_by_id(conn, app.storage.user["user_id"])
+    finally:
+        conn.close()
+
+
+def authed_page(active, render):
+    """Common guard and shell for every screen behind the login."""
+    if not is_logged_in():
+        return RedirectResponse("/login")
+    try:
+        user = current_user()
+    except Exception as e:
+        ui.label(f"שגיאת תקשורת עם מסד הנתונים: {e}").classes("warn-text p-8")
+        return None
+    if user is None:
+        # Account was deleted while this browser was still logged in
+        app.storage.user.clear()
+        return RedirectResponse("/login")
+    admin = is_admin(user["Username"])
+    if active == "admin" and not admin:
+        return RedirectResponse("/")
+    with app_shell(active, user["Username"], show_admin=admin, on_logout=log_out):
+        render(user["ID"])
+    return None
+
+
 @ui.page("/login")
 def login():
     if is_logged_in():
         return RedirectResponse("/")
-    apply_theme()
-    login_page.build_login()
+    login_page.build("login")
 
 
 @ui.page("/signup")
 def signup():
     if is_logged_in():
         return RedirectResponse("/")
-    apply_theme()
-    login_page.build_signup()
+    login_page.build("signup")
 
 
 @ui.page("/")
 def index():
-    if not is_logged_in():
-        return RedirectResponse("/login")
-    user_id = app.storage.user["user_id"]
+    return authed_page("dashboard", dashboard_page.build)
 
-    try:
-        conn = get_connection()
-        try:
-            user = get_user_by_id(conn, user_id)
-        finally:
-            conn.close()
-    except Exception as e:
-        apply_theme()
-        ui.label(f"שגיאת תקשורת עם מסד הנתונים: {e}").classes("text-negative")
-        return
-    if user is None:
-        # Account was deleted while this browser was still logged in
-        app.storage.user.clear()
-        return RedirectResponse("/login")
-    show_admin = is_admin(user["Username"])
 
-    apply_theme()
-    with ui.row().classes("w-full items-center justify-between q-mb-md"):
-        ui.label("מערכת שיבוץ משמרות").classes("rc-title text-2xl")
-        with ui.row().classes("items-center gap-2"):
-            ui.label(f"מחובר כ־{user['Username']}").classes("text-sm text-grey-7")
-            ui.button("התנתק", icon="logout", on_click=log_out).props("flat dense")
+@ui.page("/board")
+def board(week: str = None):
+    return authed_page("board", lambda user_id: board_page.build(user_id, week))
 
-    with ui.tabs().classes("w-full") as tabs:
-        personnel_tab = ui.tab("אנשי צוות")
-        roles_tab = ui.tab("תפקידים")
-        positions_tab = ui.tab("עמדות")
-        shifts_tab = ui.tab("משמרות")
-        constraints_tab = ui.tab("אילוצים")
-        schedule_tab = ui.tab("שיבוץ")
-        if show_admin:
-            admin_tab = ui.tab("ניהול משתמשים")
 
-    with ui.tab_panels(tabs, value=personnel_tab).classes("w-full").style("background: transparent"):
-        with ui.tab_panel(personnel_tab):
-            personnel_page.build(user_id)
-        with ui.tab_panel(roles_tab):
-            roles_page.build(user_id)
-        with ui.tab_panel(positions_tab):
-            positions_page.build(user_id)
-        with ui.tab_panel(shifts_tab):
-            shifts_page.build(user_id)
-        with ui.tab_panel(constraints_tab):
-            constraints_page.build(user_id)
-        with ui.tab_panel(schedule_tab):
-            schedule_page.build(user_id)
-        if show_admin:
-            with ui.tab_panel(admin_tab):
-                admin_page.build(user_id)
+@ui.page("/team")
+def team(tab: str = "people"):
+    return authed_page("team", lambda user_id: team_page.build(user_id, tab))
+
+
+@ui.page("/admin")
+def admin():
+    return authed_page("admin", admin_page.build)
 
 
 @app.get("/health")
