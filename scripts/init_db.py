@@ -29,6 +29,7 @@ TABLE_QUERIES = [
             Username VARCHAR(50) NOT NULL,
             Password_Hash VARCHAR(255) NOT NULL,
             Created_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            Tour_Done BOOLEAN NOT NULL DEFAULT FALSE,
             CONSTRAINT uq_users_username UNIQUE (Username)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         """,
@@ -197,6 +198,20 @@ def migrate_legacy_schema(cursor):
         logger.info("Dropped legacy table '%s'.", table)
 
 
+def add_missing_columns(cursor):
+    """Columns added after a table first shipped; CREATE TABLE IF NOT EXISTS won't add them."""
+    cursor.execute(
+        """
+        SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = %s AND LOWER(TABLE_NAME) = 'users' AND LOWER(COLUMN_NAME) = 'tour_done'
+        """,
+        (DB_NAME,),
+    )
+    if not cursor.fetchone()[0]:
+        cursor.execute("ALTER TABLE Users ADD COLUMN Tour_Done BOOLEAN NOT NULL DEFAULT FALSE")
+        logger.info("Added column Users.Tour_Done.")
+
+
 def ensure_schema(conn=None):
     """
     Verifies that all required tables exist. If missing, creates them.
@@ -217,6 +232,7 @@ def ensure_schema(conn=None):
             cursor.execute(query)
             logger.info("Table '%s' checked/created successfully.", table_name)
 
+        add_missing_columns(cursor)
         conn.commit()
         cursor.close()
         logger.info("Database schema is ready.")

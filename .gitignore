@@ -63,3 +63,6 @@ mysql-local-dev/
 # Local tools
 .claude/
 .gemini/
+
+# NiceGUI local session storage
+.nicegui/

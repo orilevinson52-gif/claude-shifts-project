@@ -44,7 +44,7 @@ def date_field(label, value=""):
     return field
 
 
-def build(user_id, tab="people"):
+async def build(user_id, tab="people"):
     state = {"tab": tab if tab in dict((t[0], t) for t in TABS) else "people", "q": ""}
 
     def db(fn, *args):
@@ -65,7 +65,7 @@ def build(user_id, tab="people"):
             db_error(e)
             return False
         toast(success)
-        content.refresh()
+        await reload()
         return True
 
     def drawer(title):
@@ -225,12 +225,19 @@ def build(user_id, tab="people"):
 
     # --- rendering ---
 
-    @ui.refreshable
-    def content():
+    async def reload():
+        """Loads fresh data off the event loop, then swaps the screen in one step (no blank flash)."""
         try:
-            data = WeekData(user_id, today())
+            data = await run.io_bound(WeekData, user_id, today())
         except Exception as e:
             db_error(e)
+            return
+        state["data"] = data
+        content.refresh(data)
+
+    @ui.refreshable
+    def content(data=None):
+        if data is None:
             return
         current = state["tab"]
         add_label = dict((t[0], t[2]) for t in TABS)[current]
@@ -247,10 +254,10 @@ def build(user_id, tab="people"):
             with ui.element("div").classes("flex flex-col gap-1"):
                 ui.label("כל מה שהשיבוץ נשען עליו").classes("muted text-sm")
                 ui.label("צוות").classes("page-title").props('role="heading" aria-level="1"')
-            button(add_label, icon_name="plus", on_click=add_actions[current]).mark("add-button")
+            button(add_label, icon_name="plus", on_click=add_actions[current]).mark("add-button").props('data-tour="team-add"')
 
         with ui.element("div").classes("flex items-center justify-between gap-4 flex-wrap"):
-            with ui.element("div").classes("segmented").props('role="tablist" aria-label="סוג נתונים"').style(
+            with ui.element("div").classes("segmented").props('role="tablist" aria-label="סוג נתונים" data-tour="team-tabs"').style(
                 "overflow-x: auto; max-width: 100%"
             ):
                 for key, label, _ in TABS:
@@ -260,10 +267,10 @@ def build(user_id, tab="people"):
                     with b:
                         ui.label(label)
                         ui.label(str(counts[key])).classes("mono text-xs muted")
-                    b.on("click", lambda k=key: (state.update(tab=k), content.refresh()))
+                    b.on("click", lambda k=key: (state.update(tab=k), content.refresh(state["data"])))
             if current == "people":
                 search = ui.input(placeholder="חיפוש לפי שם או תפקיד…", value=state["q"]).props(
-                    'outlined dense clearable aria-label="חיפוש איש צוות"'
+                    'outlined dense clearable aria-label="חיפוש איש צוות" data-tour="team-search"'
                 ).style("width: 300px; max-width: 100%")
                 search.on_value_change(lambda e: (state.update(q=e.value or ""), people_grid.refresh()))
 
@@ -302,7 +309,7 @@ def build(user_id, tab="people"):
             for p in shown:
                 rc = role_class(p["Role"], data.role_names)
                 away = [u for u in data.unavailability if u["Person_ID"] == p["ID"] and u["End_Date"] >= today()]
-                with ui.element("article").classes(f"card lift p-4 flex flex-col gap-3 {rc}"):
+                with ui.element("article").props('data-tour="team-card"').classes(f"card lift p-4 flex flex-col gap-3 {rc}"):
                     with ui.element("div").classes("flex items-center gap-3"):
                         ui.label(initials(p["Full_Name"])).classes("avatar").style("width: 44px; height: 44px")
                         with ui.element("div").classes("flex flex-col gap-1 flex-grow min-w-0"):
@@ -338,7 +345,7 @@ def build(user_id, tab="people"):
                 rc = role_class(r["Role_Name"], data.role_names)
                 people = sum(1 for p in data.personnel if p["Role"] == r["Role_Name"])
                 positions = sum(1 for p in data.positions if p["Required_Role"] == r["Role_Name"])
-                with ui.element("article").classes(f"card lift p-5 flex flex-col gap-2 {rc}").style(
+                with ui.element("article").props('data-tour="team-card"').classes(f"card lift p-5 flex flex-col gap-2 {rc}").style(
                     "border-top: 4px solid var(--rc-bar)"
                 ):
                     with ui.element("div").classes("flex justify-between items-center"):
@@ -361,7 +368,7 @@ def build(user_id, tab="people"):
             for p in data.positions:
                 rc = role_class(p["Required_Role"], data.role_names)
                 week_count = sum(1 for s in data.shifts if s["Position_Name"] == p["Position_Name"])
-                with ui.element("article").classes(f"card lift p-5 flex flex-col gap-2 {rc}"):
+                with ui.element("article").props('data-tour="team-card"').classes(f"card lift p-5 flex flex-col gap-2 {rc}"):
                     with ui.element("div").classes("flex justify-between items-center"):
                         ui.label(p["Position_Name"]).classes("font-display text-xl font-semibold")
                         with ui.element("div").classes("flex"):
@@ -401,3 +408,4 @@ def build(user_id, tab="people"):
             ui.label(text).classes("muted")
 
     content()
+    await reload()

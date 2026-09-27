@@ -225,6 +225,7 @@ ICONS = {
     "arrow": '<path d="M19 12H5M12 19l-7-7 7-7"/>',
     "home": '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
     "list_plus": '<path d="M11 12H3M16 6H3M16 18H3M18 9v6M21 12h-6"/>',
+    "help": '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
     "eraser": '<path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L13 19"/><path d="M22 21H7M5 11l9 9"/>',
 }
 
@@ -346,13 +347,19 @@ def app_shell(active, username, show_admin=False, on_logout=None):
             with ui.element("div").classes("rail-logo"):
                 icon("shield", 22, 2)
             for key, href, label, icon_name in nav:
-                link = ui.element("a").classes("rail-link" + (" active" if key == active else "")).props(f'href="{href}"')
+                link = ui.element("a").classes("rail-link" + (" active" if key == active else "")).props(
+                    f'href="{href}" data-tour="nav-{key}"'
+                )
                 if key == active:
                     link.props('aria-current="page"')
                 with link:
                     icon(icon_name, 20)
                     ui.label(label)
             ui.element("div").classes("flex-grow")
+            with ui.element("a").classes("rail-btn").props(
+                'href="/?tour=1" aria-label="סיור מודרך" title="סיור מודרך" data-tour="help"'
+            ):
+                icon("help", 20)
             theme_btn = ui.element("button").classes("rail-btn").props('type="button" aria-label="החלפת מצב תצוגה"')
             with theme_btn:
                 theme_icon()
@@ -373,6 +380,10 @@ def app_shell(active, username, show_admin=False, on_logout=None):
                         icon("shield", 19, 2)
                     ui.label(username).classes("text-sm muted")
                 with ui.element("div").classes("flex items-center gap-1"):
+                    with ui.element("a").classes("icon-btn").style("width: 44px; height: 44px").props(
+                        'href="/?tour=1" aria-label="סיור מודרך" data-tour="help-mobile"'
+                    ):
+                        icon("help", 20)
                     mobile_theme = ui.element("button").classes("icon-btn").props(
                         'type="button" aria-label="החלפת מצב תצוגה"'
                     ).style("width: 44px; height: 44px")
@@ -385,7 +396,9 @@ def app_shell(active, username, show_admin=False, on_logout=None):
 
     with ui.element("nav").classes("bottom-nav").style(f"--nav-count: {len(nav)}").props('aria-label="ניווט ראשי"'):
         for key, href, label, icon_name in nav:
-            with ui.element("a").classes("bottom-link" + (" active" if key == active else "")).props(f'href="{href}"'):
+            with ui.element("a").classes("bottom-link" + (" active" if key == active else "")).props(
+                f'href="{href}" data-tour="bottom-{key}"'
+            ):
                 icon(icon_name, 22)
                 ui.label(label)
 

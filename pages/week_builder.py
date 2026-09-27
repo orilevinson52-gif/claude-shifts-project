@@ -131,7 +131,7 @@ def open_dialog(user_id, week_start, positions, on_done):
                 return
             dialog.close()
             toast(f"נוצרו {created} משמרות" if created else "לא נוצרו משמרות חדשות (כבר קיימות)")
-            on_done()
+            await on_done()
 
         with ui.element("div").classes("flex gap-2 justify-end w-full"):
             button("ביטול", kind="secondary", on_click=dialog.close)

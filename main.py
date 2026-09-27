@@ -1,14 +1,17 @@
+import logging
+
 from fastapi.responses import RedirectResponse
-from nicegui import app, ui
+from nicegui import app, run, ui
 
 from auth import is_admin
 from config import APP_PORT, AUTO_INIT_DB, STORAGE_SECRET
-from db.connection import get_connection, get_user_by_id
-from pages import admin_page, board_page, dashboard_page, login_page, team_page
+from db.connection import get_connection, get_user_by_id, init_pool
+from pages import admin_page, board_page, dashboard_page, login_page, team_page, tour
 from pages.ui_kit import app_shell, install_theme
 from scripts.init_db import ensure_schema
 
 install_theme()
+tour.install()
 
 
 def is_logged_in():
@@ -20,33 +23,46 @@ def log_out():
     ui.navigate.to("/login")
 
 
-def current_user():
-    """The logged-in user's row; None when the account no longer exists. Raises on DB errors."""
+def load_user(user_id):
+    """The user's row; None when the account no longer exists. Raises on DB errors."""
     conn = get_connection()
     try:
-        return get_user_by_id(conn, app.storage.user["user_id"])
+        return get_user_by_id(conn, user_id)
     finally:
         conn.close()
 
 
-def authed_page(active, render):
-    """Common guard and shell for every screen behind the login."""
+async def authed_page(active, render, tour_requested=False):
+    """
+    Common guard and shell for every screen behind the login.
+    The page is sent right away; the database work happens after the browser connects,
+    in a worker thread, so a slow query never freezes the server for other users.
+    """
     if not is_logged_in():
         return RedirectResponse("/login")
+    user_id = app.storage.user["user_id"]  # session storage is only reachable here, not in worker threads
+    await ui.context.client.connected(timeout=30)
     try:
-        user = current_user()
+        user = await run.io_bound(load_user, user_id)
     except Exception as e:
+        logging.exception("Loading the current user failed")
         ui.label(f"שגיאת תקשורת עם מסד הנתונים: {e}").classes("warn-text p-8")
         return None
     if user is None:
         # Account was deleted while this browser was still logged in
         app.storage.user.clear()
-        return RedirectResponse("/login")
+        ui.navigate.to("/login")
+        return None
     admin = is_admin(user["Username"])
     if active == "admin" and not admin:
-        return RedirectResponse("/")
+        ui.navigate.to("/")
+        return None
     with app_shell(active, user["Username"], show_admin=admin, on_logout=log_out):
-        render(user["ID"])
+        await render(user["ID"])
+    if active in tour.STEPS:
+        # the dashboard opens the tour by itself once per user; other screens continue it on request
+        first_visit = active == "dashboard" and not user["Tour_Done"]
+        tour.attach(active, user["ID"], start=tour_requested or first_visit)
     return None
 
 
@@ -65,23 +81,25 @@ def signup():
 
 
 @ui.page("/")
-def index():
-    return authed_page("dashboard", dashboard_page.build)
+async def index(tour: str = None):
+    return await authed_page("dashboard", dashboard_page.build, tour_requested=bool(tour))
 
 
 @ui.page("/board")
-def board(week: str = None):
-    return authed_page("board", lambda user_id: board_page.build(user_id, week))
+async def board(week: str = None, tour: str = None):
+    return await authed_page("board", lambda user_id: board_page.build(user_id, week), tour_requested=bool(tour))
 
 
 @ui.page("/team")
-def team(tab: str = "people"):
-    return authed_page("team", lambda user_id: team_page.build(user_id, tab))
+async def team(tab: str = "people", tour: str = None):
+    return await authed_page("team", lambda user_id: team_page.build(user_id, tab), tour_requested=bool(tour))
 
 
 @ui.page("/admin")
-def admin():
-    return authed_page("admin", admin_page.build)
+async def admin():
+    async def render(user_id):
+        admin_page.build(user_id)
+    return await authed_page("admin", render)
 
 
 @app.get("/health")
@@ -96,6 +114,10 @@ def on_startup():
             ensure_schema()
         except Exception as exc:
             print(f"[WARN] Startup database verification: {exc}")
+    try:
+        init_pool()
+    except Exception as exc:
+        print(f"[WARN] Could not open the database connection pool yet: {exc}")
 
 
 if __name__ in {"__main__", "__mp_main__"}:

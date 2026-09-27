@@ -49,7 +49,7 @@ def parse_week(value):
         return today()
 
 
-def build(user_id, week_param=None):
+async def build(user_id, week_param=None):
     anchor = parse_week(week_param)
     state = {"drag": None, "just": None, "q": "", "day": None}
     cards = {}  # shift id -> {"el", "label", "shift", "base"}
@@ -129,12 +129,13 @@ def build(user_id, week_param=None):
             db_error(e)
             return
         if person is not None:
+            state["just"] = shift_id
+        await reload()
+        if person is not None:
             day_name = DAY_NAMES[day_index(shift["Date"])]
             toast(f"{person['Full_Name']} שובץ ל{shift['Position_Name']} · {day_name} {time_range(shift)}")
-            state["just"] = shift_id
         else:
             toast("השיבוץ הוסר")
-        content.refresh()
 
     # --- dialogs ---
 
@@ -194,7 +195,7 @@ def build(user_id, week_param=None):
                     db_error(e)
                     return
                 toast("המשמרת נמחקה")
-                content.refresh()
+                await reload()
 
             with ui.element("div").classes("flex gap-2 justify-end w-full"):
                 button("ביטול", kind="secondary", on_click=dialog.close)
@@ -215,7 +216,7 @@ def build(user_id, week_param=None):
                     db_error(e)
                     return
                 toast("השבוע נוקה")
-                content.refresh()
+                await reload()
 
             with ui.element("div").classes("flex gap-2 justify-end w-full"):
                 button("ביטול", kind="secondary", on_click=dialog.close)
@@ -235,20 +236,26 @@ def build(user_id, week_param=None):
             toast(f"{unresolved} משמרות לא ניתנות לשיבוץ – עבור עם העכבר כדי לראות למה", kind="warn")
         else:
             toast("כל המשמרות כבר משובצות")
-        content.refresh()
+        await reload()
 
     # --- rendering ---
 
-    @ui.refreshable
-    def content():
-        cards.clear()
-        chips.clear()
+    async def reload():
+        """Loads fresh data off the event loop, then swaps the screen in one step (no blank flash)."""
         try:
-            data = WeekData(user_id, anchor)
+            data = await run.io_bound(WeekData, user_id, anchor)
         except Exception as e:
             db_error(e)
             return
         holder["data"] = data
+        content.refresh(data)
+
+    @ui.refreshable
+    def content(data=None):
+        if data is None:
+            return
+        cards.clear()
+        chips.clear()
         prev_week = (data.week_start - timedelta(days=7)).isoformat()
         next_week = (data.week_start + timedelta(days=7)).isoformat()
         total, filled = len(data.shifts), data.filled_count
@@ -257,7 +264,9 @@ def build(user_id, week_param=None):
         with ui.element("header").classes("header-row flex items-center justify-between gap-4 flex-wrap"):
             with ui.element("div").classes("flex items-center gap-4 flex-wrap"):
                 ui.label("לוח שיבוץ").classes("page-title").props('role="heading" aria-level="1"')
-                with ui.element("div").classes("card flex items-center").style("padding: 3px; border-radius: 10px"):
+                with ui.element("div").classes("card flex items-center").style("padding: 3px; border-radius: 10px").props(
+                    'data-tour="week-nav"'
+                ):
                     with ui.element("a").classes("icon-btn").props(f'href="/board?week={prev_week}" aria-label="שבוע קודם"'):
                         icon("chev_right", 18, 2)
                     ui.label(week_label(data.week_start, data.week_end)).classes("text-sm font-medium px-2").style(
@@ -272,23 +281,30 @@ def build(user_id, week_param=None):
                         ui.html(f"<b style='color: var(--text)'>{filled}</b> / {total} משובצות", sanitize=False)
             with ui.element("div").classes("flex gap-2 flex-wrap"):
                 button("משמרות לשבוע", kind="secondary", icon_name="list_plus",
-                       on_click=lambda: week_builder.open_dialog(user_id, data.week_start, data.positions, content.refresh))
+                       on_click=lambda: week_builder.open_dialog(user_id, data.week_start, data.positions, reload)
+                       ).props('data-tour="week-builder"')
                 if total:
                     button("נקה שבוע", kind="secondary", on_click=confirm_clear_week)
-                    button("שבץ אוטומטית", icon_name="sparkle", on_click=auto_schedule).mark("auto-schedule")
+                    button("שבץ אוטומטית", icon_name="sparkle", on_click=auto_schedule).mark("auto-schedule").props(
+                        'data-tour="auto-schedule"'
+                    )
 
         if not data.positions or not data.personnel:
-            with ui.element("div").classes("card p-10 flex flex-col items-center gap-3 text-center"):
+            with ui.element("div").classes("card p-10 flex flex-col items-center gap-3 text-center").props(
+                'data-tour="board-empty"'
+            ):
                 ui.label("חסרים אנשי צוות או עמדות").classes("section-title")
                 ui.label("הוסף אותם במסך הצוות, ואז חזור לכאן לבנות את השבוע.").classes("muted")
                 button("למסך הצוות", href="/team")
             return
         if not data.shifts:
-            with ui.element("div").classes("card p-10 flex flex-col items-center gap-3 text-center"):
+            with ui.element("div").classes("card p-10 flex flex-col items-center gap-3 text-center").props(
+                'data-tour="board-empty"'
+            ):
                 ui.label("אין משמרות בשבוע הזה").classes("section-title")
                 ui.label("הגדר אילו משמרות יש בכל עמדה בכל יום, ואז שבץ בגרירה או אוטומטית.").classes("muted")
                 button("צור משמרות לשבוע", icon_name="list_plus",
-                       on_click=lambda: week_builder.open_dialog(user_id, data.week_start, data.positions, content.refresh))
+                       on_click=lambda: week_builder.open_dialog(user_id, data.week_start, data.positions, reload))
             return
 
         desktop_board(data)
@@ -299,7 +315,7 @@ def build(user_id, week_param=None):
         with ui.element("div").classes("lg-only flex gap-4 items-start"):
             with ui.element("aside").classes("card p-4 flex flex-col gap-3").style(
                 "width: 236px; flex-shrink: 0; position: sticky; top: 16px; max-height: calc(100vh - 32px)"
-            ).props('aria-label="אנשי צוות"'):
+            ).props('aria-label="אנשי צוות" data-tour="people-panel"'):
                 with ui.element("div").classes("flex flex-col"):
                     ui.label("אנשי צוות").classes("font-display font-semibold")
                     ui.label("גרור אל משמרת כדי לשבץ").classes("muted text-xs")
@@ -389,7 +405,7 @@ def build(user_id, week_param=None):
             f"{shift['Position_Name']} · {day_name} {fmt_time(shift['Start_Time'])}–{fmt_time(shift['End_Time'])}"
             + (" · פתוחה" if is_open else f" · {shift['Assigned_Name']}")
         )
-        el = ui.element("div").classes(base).props('role="button" tabindex="0"').mark(f"shift-{shift['Shift_ID']}")
+        el = ui.element("div").classes(base).props('role="button" tabindex="0" data-tour="shift-card"').mark(f"shift-{shift['Shift_ID']}")
         el._props["title"] = title
         el._props["aria-label"] = title
         with el:
@@ -411,7 +427,7 @@ def build(user_id, week_param=None):
         def day_view():
             day = days[state["day"]]
             with ui.element("div").classes("grid gap-1 w-full").style("grid-template-columns: repeat(7, minmax(0, 1fr))").props(
-                'role="tablist" aria-label="ימי השבוע"'
+                'role="tablist" aria-label="ימי השבוע" data-tour="day-pills"'
             ):
                 for i, d in enumerate(days):
                     has_open = any(s["Date"] == d and s["Assigned_Person_ID"] is None for s in data.shifts)
@@ -440,7 +456,7 @@ def build(user_id, week_param=None):
                         is_open = s["Assigned_Person_ID"] is None
                         row = ui.element("button").classes(
                             "m-shift " + ("is-open" if is_open else role_class(s["Assigned_Role"], data.role_names))
-                        ).props('type="button"')
+                        ).props('type="button" data-tour="m-shift"')
                         with row:
                             ui.label(time_range(s)).classes("mono text-xs muted").style("white-space: nowrap")
                             ui.label("פתוחה – הקש לשיבוץ" if is_open else s["Assigned_Name"]).classes(
@@ -455,3 +471,4 @@ def build(user_id, week_param=None):
     banner = None
     banner_text = None
     content()
+    await reload()

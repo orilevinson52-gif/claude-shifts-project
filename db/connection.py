@@ -1,10 +1,39 @@
+import threading
+
 import mysql.connector
+from mysql.connector import errors, pooling
 
 from config import DB_CONFIG
 
+POOL_SIZE = 5
+_pool = None
+_pool_lock = threading.Lock()
+
+
+def init_pool():
+    """Opens the pooled connections up front; each new TLS connection to the cloud DB takes seconds."""
+    global _pool
+    with _pool_lock:
+        if _pool is None:
+            _pool = pooling.MySQLConnectionPool(
+                pool_name="app", pool_size=POOL_SIZE, pool_reset_session=True, **DB_CONFIG
+            )
+    return _pool
+
 
 def get_connection():
-    return mysql.connector.connect(**DB_CONFIG)
+    """A pooled connection (close() returns it to the pool); a fresh one if the pool is busy or broken."""
+    try:
+        conn = (_pool or init_pool()).get_connection()
+    except errors.PoolError:
+        return mysql.connector.connect(**DB_CONFIG)
+    try:
+        # The server drops idle connections; reconnect before handing out a dead one
+        conn.ping(reconnect=True, attempts=2, delay=0)
+    except errors.Error:
+        conn.close()
+        return mysql.connector.connect(**DB_CONFIG)
+    return conn
 
 
 # --- Users ---
@@ -33,10 +62,17 @@ def get_user_by_username(conn, username):
 
 def get_user_by_id(conn, user_id):
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT ID, Username FROM Users WHERE ID = %s", (user_id,))
+    cursor.execute("SELECT ID, Username, Tour_Done FROM Users WHERE ID = %s", (user_id,))
     row = cursor.fetchone()
     cursor.close()
     return row
+
+
+def set_tour_done(conn, user_id, done):
+    cursor = conn.cursor()
+    cursor.execute("UPDATE Users SET Tour_Done = %s WHERE ID = %s", (done, user_id))
+    conn.commit()
+    cursor.close()
 
 
 # --- Admin ---

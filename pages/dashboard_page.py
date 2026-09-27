@@ -27,13 +27,19 @@ def run_generate(user_id):
         conn.close()
 
 
-def build(user_id):
-    @ui.refreshable
-    def content():
+async def build(user_id):
+    async def reload():
+        """Loads fresh data off the event loop, then swaps the screen in one step (no blank flash)."""
         try:
-            data = WeekData(user_id, today())
+            data = await run.io_bound(WeekData, user_id, today())
         except Exception as e:
             db_error(e)
+            return
+        content.refresh(data)
+
+    @ui.refreshable
+    def content(data=None):
+        if data is None:
             return
 
         total = len(data.shifts)
@@ -47,7 +53,7 @@ def build(user_id):
                 ui.label("סקירת השבוע").classes("page-title").props('role="heading" aria-level="1"')
             with ui.element("div").classes("flex gap-2 flex-wrap"):
                 button("פתח לוח שיבוץ", kind="secondary", icon_name="calendar", href="/board")
-                button("צור סידור עבודה", on_click=generate, icon_name="sparkle")
+                button("צור סידור עבודה", on_click=generate, icon_name="sparkle").props('data-tour="generate"')
 
         if not data.personnel or not data.positions:
             empty_state(
@@ -60,7 +66,7 @@ def build(user_id):
 
         with ui.element("section").classes("stats-grid grid gap-4").style(
             "grid-template-columns: repeat(4, minmax(0, 1fr))"
-        ).props('aria-label="מדדים"'):
+        ).props('aria-label="מדדים" data-tour="stats"'):
             with ui.element("div").classes("card lift p-5 flex flex-col gap-2"):
                 ui.label("משמרות השבוע").classes("muted text-sm")
                 ui.label(str(total)).classes("stat-value")
@@ -119,13 +125,14 @@ def build(user_id):
             toast(f"{unresolved} משמרות לא ניתנות לשיבוץ – ראה 'דורש טיפול'", kind="warn")
         else:
             toast("כל המשמרות כבר משובצות")
-        content.refresh()
+        await reload()
 
     content()
+    await reload()
 
 
 def empty_state(title, text, cta, href):
-    with ui.element("div").classes("card p-10 flex flex-col items-center gap-3 text-center"):
+    with ui.element("div").classes("card p-10 flex flex-col items-center gap-3 text-center").props('data-tour="empty"'):
         ui.label(title).classes("section-title")
         ui.label(text).classes("muted")
         button(cta, href=href)
@@ -155,7 +162,7 @@ def balance_section(data):
 
 
 def todo_section(data, open_shifts):
-    with ui.element("section").classes("card p-6 flex flex-col gap-3").props('aria-labelledby="todo-title"'):
+    with ui.element("section").classes("card p-6 flex flex-col gap-3").props('aria-labelledby="todo-title" data-tour="todo"'):
         with ui.element("div").classes("flex justify-between items-baseline"):
             ui.label("דורש טיפול").classes("section-title").props('id="todo-title"')
             ui.label(f"{len(open_shifts)} משמרות פתוחות").classes("muted text-sm")
