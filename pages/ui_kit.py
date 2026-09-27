@@ -148,7 +148,8 @@ body { background: var(--bg) !important; color: var(--text); font-family: 'Heebo
 .drag-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 9px; background: var(--accent-soft);
   color: var(--accent-text); font-size: 13.5px; font-weight: 500; }
 .day-head { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 4px 0; border-radius: 8px; }
-.day-head.today { background: var(--accent-soft); color: var(--accent-text); }
+/* today: an underline only, so it never reads as a role color */
+.day-head.today { color: var(--accent-text); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
 @keyframes pop { 0% { transform: scale(.96) } 60% { transform: scale(1.03) } 100% { transform: scale(1) } }
 .pop { animation: pop .28s ease-out; }
 .day-pill { height: 58px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text);
