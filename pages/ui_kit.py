@@ -47,6 +47,8 @@ body.body--dark {
 html, body { direction: rtl; }
 body { background: var(--bg) !important; color: var(--text); font-family: 'Heebo', system-ui, sans-serif; }
 .nicegui-content { padding: 0 !important; gap: 0 !important; }
+/* Quasar's .flex wraps by default; wrap only where a layout asks for it (flex-wrap) */
+.flex:not(.flex-wrap) { flex-wrap: nowrap; }
 .q-field__native, .q-field__label, .q-item__label, .q-btn, .q-menu, .q-dialog { font-family: 'Heebo', system-ui, sans-serif; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -111,7 +113,8 @@ body { background: var(--bg) !important; color: var(--text); font-family: 'Heebo
 
 .segmented { display: flex; gap: 4px; background: var(--sunken); border-radius: 11px; padding: 4px; }
 .segmented button { height: 38px; padding: 0 16px; border: none; border-radius: 8px; font-size: 14.5px; font-weight: 600;
-  background: transparent; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: inherit; }
+  background: transparent; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: inherit;
+  white-space: nowrap; flex-shrink: 0; }
 .segmented button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(20,20,15,.12); }
 
 .field-input { height: 44px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel); color: var(--text);
@@ -119,7 +122,14 @@ body { background: var(--bg) !important; color: var(--text); font-family: 'Heebo
 .field-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 
 /* board */
-.board-grid { display: grid; grid-template-columns: 116px repeat(7, minmax(0, 1fr)); gap: 8px; }
+.board-grid { display: grid; grid-template-columns: minmax(84px, 116px) repeat(7, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 1180px) {
+  /* not enough width for both: keep the board readable; shifts are still assigned by tapping them */
+  .people-panel { display: none !important; }
+  .board-grid { gap: 6px; }
+  .shift-card { padding: 5px 6px; }
+  .shift-time { font-size: 10.5px; }
+}
 .shift-card { box-sizing: border-box; border-radius: 9px; border: 1.5px solid transparent; padding: 6px 8px; min-height: 56px;
   display: flex; flex-direction: column; justify-content: space-between; gap: 3px; cursor: pointer;
   transition: background .15s, border-color .15s, opacity .15s, transform .15s; background: var(--rc-bg); color: var(--rc-fg); }
@@ -128,7 +138,9 @@ body { background: var(--bg) !important; color: var(--text); font-family: 'Heebo
 .shift-card.is-ok { background: var(--accent-soft); border: 1.5px dashed var(--accent); color: var(--accent-text); opacity: 1; }
 .shift-card.is-blocked { opacity: .35; }
 .shift-card.is-self { border-color: var(--accent); }
-.shift-name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shift-name { font-size: 12.5px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.shift-time { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .chip { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--panel); cursor: grab; transition: background .15s, transform .15s, box-shadow .15s; user-select: none; }
 .chip:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(20,20,15,.08); }

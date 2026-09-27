@@ -312,10 +312,10 @@ async def build(user_id, week_param=None):
         state["just"] = None
 
     def desktop_board(data):
-        with ui.element("div").classes("lg-only flex gap-4 items-start"):
+        with ui.element("div").classes("lg-only flex no-wrap gap-4 items-start"):
             with ui.element("aside").classes("card p-4 flex flex-col gap-3").style(
-                "width: 236px; flex-shrink: 0; position: sticky; top: 16px; max-height: calc(100vh - 32px)"
-            ).props('aria-label="אנשי צוות" data-tour="people-panel"'):
+                "width: clamp(190px, 17vw, 236px); flex-shrink: 0; position: sticky; top: 16px; max-height: calc(100vh - 140px); overflow-y: auto"
+            ).classes("people-panel").props('aria-label="אנשי צוות" data-tour="people-panel"'):
                 with ui.element("div").classes("flex flex-col"):
                     ui.label("אנשי צוות").classes("font-display font-semibold")
                     ui.label("גרור אל משמרת כדי לשבץ").classes("muted text-xs")
@@ -409,7 +409,7 @@ async def build(user_id, week_param=None):
         el._props["title"] = title
         el._props["aria-label"] = title
         with el:
-            ui.label(time_range(shift)).classes("mono").style("font-size: 11px; color: var(--muted)")
+            ui.label(time_range(shift)).classes("mono shift-time")
             label = ui.label("פתוחה" if is_open else shift["Assigned_Name"]).classes("shift-name")
         cards[shift["Shift_ID"]] = {"el": el, "label": label, "shift": shift, "base": base, "title": title}
         el.on("dragover", js_handler=ALLOW_DROP_JS)
